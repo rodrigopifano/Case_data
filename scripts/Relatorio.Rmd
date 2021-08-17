@@ -1,0 +1,1099 @@
+---
+title: "Relatório Case de Dados"
+subtitle: " "
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+  - \usepackage{subfig}
+# params:
+#   endpoint:
+#   value: 20210217
+#   choices:
+#     - 20210217
+#     - 20210110
+output: 
+  html_document:
+    # toc: true
+    # toc_depth: 3
+    # toc_float: true
+    # number_sections: true
+    self_contained: yes
+    #css: styles_report_hence.css
+    # theme: united
+    highlight: pygments
+---
+
+<style>
+    body .main-container {max-width: 1200px;
+        text-align: justify;
+
+    }
+    
+    .list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+      background-color: #2366FF;
+    }
+    
+</style>
+
+<script>
+  $(document).ready(function() {
+    $head = $('#header');
+    $head.prepend('<img src=\"logo_stone.png\" style=\"float: right;width: 200px;\"/>')
+  });
+</script>
+
+<style type="text/css">
+  body{
+  font-size: 16pt;
+  font-family: "GT-Cinetype-Regular";
+}
+</style>  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(xtable.comment = FALSE)
+```
+```{r diretorios, echo=FALSE, include = FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+
+options(warn = -1) 
+rm(list = ls()); gc()
+library(data.table)
+library(magrittr)
+library(glue)
+library(stringr)
+library(dplyr)
+library(purrr)
+library(tibble)
+library(arrow)
+library(DT)
+library(kableExtra)
+library(knitr)
+library(moments)
+library(ggplot2)
+library(plotly)
+library(here)
+library(glue)
+library(highcharter) 
+library(zoo)
+library(lubridate)
+library(gridExtra)
+library(reshape2)
+library(forecast)
+
+options(tibble.width = Inf)
+
+numberOfDays <- function(date) {
+    m <- format(date, format="%m")
+
+    while (format(date, format="%m") == m) {
+        date <- date + 1
+    }
+
+    return(as.integer(format(date - 1, format="%d")))
+}
+
+
+
+Receita_E1 <- readRDS("~/Case_Stone/result_parciais/Receita_TOTAL_e1_v3.rds")
+Receita_E1 <- dcast(Receita_E1, Mes_ano ~ dias, value.var = 'Valor')
+colnames(Receita_E1) <- c("Mês","Mensal","Trimestral","Semestral","Anual")
+Receita_E1[is.na(Receita_E1)] <- 0
+Receita_E1$Total <- rowSums(Receita_E1[,-1],na.rm = T)
+
+Receita_E1$Mês <- as.Date(Receita_E1$Mês) 
+Receita_E1$n_dias <- ""
+for (i in 1:nrow(Receita_E1)) {
+  Receita_E1$n_dias[i] <- numberOfDays(Receita_E1$Mês[i])
+}
+Receita_E1$n_dias <- as.numeric(Receita_E1$n_dias)
+Receita_E1$media_dia <- Receita_E1$Total/Receita_E1$n_dias 
+
+
+Receita_E2 <- readRDS("~/Case_Stone/result_parciais/Receita_TOTAL_e2.rds")
+Receita_E2$Mês <- as.Date(Receita_E2$Mês)
+Receita_E2$n_dias <- ""
+for (i in 1:nrow(Receita_E2)) {
+  Receita_E2$n_dias[i] <- numberOfDays(Receita_E2$Mês[i])
+}
+Receita_E2$n_dias <- as.numeric(Receita_E2$n_dias)
+Receita_E2$media_dia <- Receita_E2$Total/Receita_E2$n_dias 
+
+
+```
+
+# Receita  Total {.tabset .tabset-fade}
+
+## Empresa 1
+  
+<div class = "row">
+<div class = "col-md-6">
+```{r plot_e1, echo=FALSE}
+
+
+Receita_E1[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(Total/1000000,2)),
+    color = "#22b24c",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Total",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ milhões"))  %>% 
+  hc_size(
+    height = 582
+  )
+```
+</div>
+
+<div class = "col-md-6">
+
+```{r tab_e1, echo=FALSE}
+tab_e1_r1 <- Receita_E1
+tab_e1_r1[,-1] <- round(tab_e1_r1[,-1]/tab_e1_r1[,6]*100,2)
+tab_e1_r1 <- tab_e1_r1[,-c(6,7,8)]
+tab_e1_r1$Mês <- as.yearmon(tab_e1_r1$Mês)
+kbl(tab_e1_r1[1:14,], align = "r") %>%
+  kable_classic(lightable_options = "hover") %>%
+  kable_styling(font_size = 12) %>%
+  add_header_above(c(" " = 1,"Participação percentual de cada tipo de plano na Receita Total" = 4), bold = T)
+```
+</div>
+</div>
+  
+<!-- Percebe-se que tanto para a empresa 1 quanto para a empresa 2 há uma queda na receita do mês de Fev/2021 (na comparação com Jan/2021). A princípio, dado o caráter cumulativo da receita dessas empresas, essa queda parece estranha. Principalmente para a empresa 1, que não teve cancelamento de clientes no período analisado e cuja esmagadora maioria dos clientes compra planos recorrentes (ver tabela acima), parece não fazer sentido que a receita caia de um mês para o outro. Contudo, como a receita dessas empresas é auferida na forma pro-rata dia, o fato de o mês de Fev/2021 ter apenas 28 dias impacta na contabilização da receita deste mês. A observação dos gráficos abaixo, que ilustram a receita média por dia em cada mês do período, reforça a tese de que a queda da receita em Fev/2021 se deu devido ao calendário. Observa-se, para as duas empresas, um crescimento da receita média por dia no mês de Fev/2021 quando comparado ao mês de Jan/2021. -->
+
+## Empresa 2
+  
+<div class = "row">
+<div class = "col-md-6">
+```{r plot_e2, echo=FALSE}
+Receita_E2[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(Total/1000,2)),
+    color = "#22b24c",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Total",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text ="R$ mil")) %>% 
+  hc_size(
+    height = 582
+  )
+```
+</div>
+
+<div class = "col-md-6">
+
+```{r tab_e2, echo=FALSE}
+tab_e2_r2 <- Receita_E2
+tab_e2_r2[,-1] <- round(tab_e2_r2[,-1]/tab_e2_r2[,6]*100,2)
+tab_e2_r2 <- tab_e2_r2[,-c(6,7,8)]
+tab_e2_r2$Mês <- as.yearmon(tab_e2_r2$Mês)
+kbl(tab_e2_r2[1:14,-6], align = "r") %>%
+  kable_classic(lightable_options = "hover") %>%
+  kable_styling(font_size = 12) %>%
+  add_header_above(c(" " = 1,"Participação percentual de cada tipo de plano na Receita Total" = 4), bold = T)
+```
+</div>
+</div>
+
+<!-- Percebe-se que tanto para a empresa 1 quanto para a empresa 2 há uma queda na receita do mês de Fev/2021 (na comparação com Jan/2021). A princípio, dado o caráter cumulativo da receita dessas empresas, essa queda parece estranha. Principalmente para a empresa 1, que não teve cancelamento de clientes no período analisado e cuja esmagadora maioria dos clientes compra planos recorrentes (ver tabela acima), parece não fazer sentido que a receita caia de um mês para o outro. Contudo, como a receita dessas empresas é auferida na forma pro-rata dia, o fato de o mês de Fev/2021 ter apenas 28 dias impacta na contabilização da receita deste mês. A observação dos gráficos abaixo, que ilustram a receita média por dia em cada mês do período, reforça a tese de que a queda da receita em Fev/2021 se deu devido ao calendário. Observa-se, para as duas empresas, um crescimento da receita média por dia no mês de Fev/2021 quando comparado ao mês de Jan/2021. -->
+
+## Consolidadas
+
+```{r plot_cons, echo=FALSE}
+juntas <- setDT(data.frame("Mês" = Receita_E1[1:14,1]))
+juntas$Total <- Receita_E1$Total[1:14] + Receita_E2$Total[1:14]  
+juntas %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(Total/1000000,2)),
+    color = "#0a3b1b",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Total",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ milhões"))  %>% 
+  hc_size(
+    height = 582
+  )
+```
+
+# {}
+
+Percebe-se que tanto para a empresa 1 quanto para a empresa 2 há uma queda na receita do mês de Fev/2021 (na comparação com Jan/2021). A princípio, dado o caráter cumulativo da receita dessas empresas, essa queda parece estranha. Contudo, como a receita dessas empresas é auferida na forma pro-rata dia, o fato de o mês de Fev/2021 ter apenas 28 dias impacta na contabilização da receita deste mês. A observação dos gráficos abaixo, que ilustram a receita média por dia em cada mês do período, reforça a tese de que a queda da receita em Fev/2021 se deu devido ao calendário. Observa-se, para as duas empresas, um crescimento da receita média por dia no mês de Fev/2021 quando comparado ao mês de Jan/2021.
+
+
+
+#  {.tabset .tabset-fade}
+
+## Empresa 1
+
+```{r mediadia_e1, echo=FALSE}
+Receita_E1[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(media_dia/1000,2)),
+    color = "#22b24c",
+    name = "Receita média por dia"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita média por dia",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 582
+  )
+```
+
+
+## Empresa 2
+
+```{r mediadia_e2, echo=FALSE}
+Receita_E2[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(media_dia/1000,2)),
+    color = "#22b24c",
+    name = "Receita média por dia"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita média por dia",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 582
+  )
+```
+
+
+## Consolidadas
+
+```{r mediadia_cons, echo=FALSE}
+juntas <- setDT(data.frame("Mês" = Receita_E1[1:14,1]))
+juntas$Total <- Receita_E1$Total[1:14] + Receita_E2$Total[1:14]  
+juntas <- merge(juntas,Receita_E1[1:14,c(1,7)],by = "Mês")
+juntas$media_dia <- juntas$Total/juntas$n_dias
+juntas %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = round(media_dia/1000,2)),
+    color = "#0a3b1b",
+    name = "Receita média por dia"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita média por dia",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 582
+  )
+```
+
+# Base Ativa {.tabset .tabset-fade}
+
+## Empresa 1
+
+<!-- <div class = "row"> -->
+<!-- <div class = "col-md-9"> -->
+```{r clientes_e1, echo=FALSE}
+clientes_e1 <- readRDS("~/Case_Stone/Resultados/clientes_e1_v2.rds")
+
+clientes_e1$Mes_inicio <- as.Date(clientes_e1$Mes_inicio)
+colnames(clientes_e1)[1] <- "Mês"
+# base_e1_tr <- readRDS("~/Case_Stone/result_parciais/base_e1_tratada.rds")
+# clientes_mensais_mar21_e1 <- sum(base_e1_tr$recorrente) 
+# clientes_e1[15,2] <- clientes_e1[15,2]+clientes_mensais_mar21_e1
+clientes_e1[1:14,c(1,5)] %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = Ativos2),
+    color = "#22b24c",
+    name = "Número de clientes"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Número de clientes ativos",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 470
+  )
+
+```
+<!-- </div> -->
+
+<!-- <div class = "col-md-3"> -->
+
+<!-- <font size="4"> -->
+
+<!-- Cada fatura foi considerada como um cliente diferente. Os clientes foram contabilizados a partir da variável "id_fatura" e agrupados mês a mês -->
+
+<!-- </font> -->
+<!-- </div> -->
+<!-- </div> -->
+
+
+## Empresa 2
+
+
+<!-- <div class = "row"> -->
+<!-- <div class = "col-md-9"> -->
+```{r clientes_e2, echo=FALSE}
+clientes_e2 <- readRDS("~/Case_Stone/Resultados/clientes_e2.rds")
+
+
+clientes_e2$Mes_inicio <- as.Date(clientes_e2$Mes_inicio)
+colnames(clientes_e2)[1] <- "Mês"
+
+clientes_e2[1:14,c(1,5)] %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = Ativos2),
+    color = "#22b24c",
+    name = "Número de clientes"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Número de clientes ativos",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 470
+  )
+
+```
+<!-- </div> -->
+
+<!-- <div class = "col-md-3"> -->
+
+<!-- <font size="4"> -->
+<!-- Para o cálculo dessa métrica, considerou-se cada compra como um cliente diferente. Uma mesma conta que fez duas compras em dois perfis diferentes por exemplo, entrou como dois clientes ativos. Se essa conta cancelou um dos dois perfis em um determinado mês, mas permaneceu com o outro perfil, ela se converteu em um cliente ativo e um cancelado naquele mês. -->
+<!-- </font> -->
+<!-- </div> -->
+<!-- </div> -->
+
+
+## Consolidadas
+
+
+```{r clientes_cons, echo=FALSE}
+clientes_cons <- merge(select(clientes_e1,`Mês`,Ativos2),select(clientes_e2,`Mês`,Ativos2),by= "Mês")
+clientes_cons$Total <- clientes_cons$Ativos2.x+clientes_cons$Ativos2.y
+
+clientes_cons[1:14,] %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = Total),
+    color = "#0a3b1b",
+    name = "Número de clientes"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Número de clientes ativos",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 470
+  )
+
+```
+
+
+# Ticket médio {.tabset .tabset-fade}
+
+## Empresa 1
+
+<div class = "row">
+<div class = "col-md-8">
+
+```{r avg_tckt_e1, echo=FALSE}
+avg_tckt <- merge(Receita_E1[1:14,c(1,6)],clientes_e1[1:14,c(1,5)],by="Mês") %>%
+  merge(Receita_E2[1:14,c(1,6)],by="Mês") %>%
+  merge(clientes_e2[1:14,c(1,5)],by="Mês")
+
+avg_tckt$avg_tckt_e1 <- round(avg_tckt$Total.x/avg_tckt$Ativos2.x,2)
+avg_tckt$avg_tckt_e2 <- round(avg_tckt$Total.y/avg_tckt$Ativos2.y,2)
+avg_tckt <- select(avg_tckt,`Mês`,avg_tckt_e1,avg_tckt_e2)
+colnames(avg_tckt)[2:3] <- c("Empresa 1","Empresa 2")
+
+
+avg_tckt %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = `Empresa 1`),
+    color = "#22b24c",
+    name = "Ticket médio"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Ticket médio em reais (R$)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 490
+  )
+
+```
+
+
+
+</div>
+
+<div class = "col-md-4">
+
+```{r tab_cagr1, echo=FALSE}
+cagrre1 <-round(((Receita_E1$Total[14]/Receita_E1$Total[1])^(1/13)-1)*100,2)
+cagrre2 <-round(((Receita_E2$Total[14]/Receita_E2$Total[1])^(1/13)-1)*100,2)
+cagrClie1 <-round(((clientes_e1$Ativos2[14]/clientes_e1$Ativos2[1])^(1/13)-1)*100,2)
+cagrClie2 <-round(((clientes_e2$Ativos2[14]/clientes_e2$Ativos2[1])^(1/13)-1)*100,2)
+tabCAGR <- data.frame("Receita" = c(cagrre1,cagrre2),
+                      "Cliente" = c(cagrClie1,cagrClie2))
+rownames(tabCAGR) <- c("Empresa 1","Empresa 2")
+kbl(tabCAGR, align = "r") %>%
+  kable_classic(lightable_options = "hover") %>%
+  kable_styling(font_size = 12) %>%
+  add_header_above(c(" " = 2,"CMGR (%) entre fev/21 e jan/20" = 1), bold = T)
+```
+
+<font size="2">
+
+Observa-se que, para a empresa 1, o crescimento médio mensal (CMGR) da receita é muito superior ao CMGR do número de clientes ativos. O mesmo não vale para a empresa 2, que tem o CMGR da receita muito próximo do CMGR do número de clientes ativos. Este fato sugere que o cresimento da receita da empresa 1 é majoritariamente oriundo de novas compras dos mesmos clientes, enquanto o crescimento da receita da empresa 2 é majoritariamente oriundo de novos clientes. Os gráficos ao lado, que mostram a evolução do ticket médio de cada empresa, sugerem o mesmo. Enquanto o ticket médio da empresa 1 apresenta uma clara tendência de alta, o da empresa 2 é relativamente constante, próximo à média do périodo, sugerindo que os novos clientes da empresa 2 geram por mês, em média, a mesma receita que os clientes antigos.
+
+</font> 
+
+</div>
+</div>
+
+## Empresa 2
+
+<div class = "row">
+<div class = "col-md-8">
+
+```{r avgtckt_e2, echo=FALSE}
+avg2 <- avg_tckt[,-2]
+
+avg2$`Média` <- round(mean(avg2$`Empresa 2`),2)
+avg2 <- melt(avg2,"Mês")
+
+avg2 %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = value, group = variable),
+    color = c("#22b24c","#0a3b1b")
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Ticket médio em reais (R$)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 490
+  )
+
+```
+
+
+
+</div>
+
+<div class = "col-md-4">
+
+```{r tab_cagr2, echo=FALSE}
+cagrre1 <-round(((Receita_E1$Total[14]/Receita_E1$Total[1])^(1/13)-1)*100,2)
+cagrre2 <-round(((Receita_E2$Total[14]/Receita_E2$Total[1])^(1/13)-1)*100,2)
+cagrClie1 <-round(((clientes_e1$Ativos2[14]/clientes_e1$Ativos2[1])^(1/13)-1)*100,2)
+cagrClie2 <-round(((clientes_e2$Ativos2[14]/clientes_e2$Ativos2[1])^(1/13)-1)*100,2)
+tabCAGR <- data.frame("Receita" = c(cagrre1,cagrre2),
+                      "Cliente" = c(cagrClie1,cagrClie2))
+rownames(tabCAGR) <- c("Empresa 1","Empresa 2")
+kbl(tabCAGR, align = "r") %>%
+  kable_classic(lightable_options = "hover") %>%
+  kable_styling(font_size = 12) %>%
+  add_header_above(c(" " = 2,"CMGR (%) entre fev/21 e jan/20" = 1), bold = T)
+```
+
+
+
+<font size="2">
+
+Observa-se que, para a empresa 1, o crescimento médio mensal (CMGR) da receita é muito superior ao CMGR do número de clientes ativos. O mesmo não vale para a empresa 2, que tem o CMGR da receita muito próximo do CMGR do número de clientes ativos. Este fato sugere que o cresimento da receita da empresa 1 é majoritariamente oriundo de novas compras dos mesmos clientes, enquanto o crescimento da receita da empresa 2 é majoritariamente oriundo de novos clientes. Os gráficos ao lado, que mostram a evolução do ticket médio de cada empresa, sugerem o mesmo. Enquanto o ticket médio da empresa 1 apresenta uma clara tendência de alta, o da empresa 2 é relativamente constante, próximo à média do périodo, sugerindo que os novos clientes da empresa 2 geram por mês, em média, a mesma receita que os clientes antigos.
+
+</font> 
+
+</div>
+</div>
+
+
+
+
+# Receita  Futura {.tabset .tabset-fade}
+
+<font size="3">
+Receita proveniente de clientes que contrataram planos trimestrais, semestrais ou anuais entre Mar/2020 e Fev/2021
+</font>
+
+## Empresa 1
+
+```{r futura_1, echo=FALSE}
+Receita_E1[15:nrow(Receita_E1),] %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = round(Total/1000,2)),
+    color = "#22b24c",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Futura Garantida",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 500
+  )
+```
+
+<!-- Observa-se que embora a receita da empresa 1, nos dois primeiros meses de 2021, esteja na ordem dos 13 milhões de reais e a receita da empresa 2, no mesmo período, gire em torno dos 820 mil reais, a receita garantida para os próximos meses de 2021 da empresa 2 é muito superior à da empresa 1, tanto em termos relativos como em termos absolutos. Esse fenômeno pode ser explicado pela composição da origem da receita de cada empresa, que está apresentada nas tabelas que se econtram na aba "Receita Total". Enquanto a empresa 1 concentra sua receita quase que inteiramente na venda de planos mensais, a empresa 2 diversifica melhor a sua fonte de receita, vendendo planos mais longos, principalmente anuais e trimestrais. Dessa forma, a empresa 2 consegue garantir a manutenção de suas operações por um período maior de tempo e se torna menos vulnerável a choques externos de qualquer natureza. Este fato fica ainda mais evidente quando na sub-aba "Análise Proporcional" da aba "Projeções" se observa a diferença da participação percentual da Receita Garantida na Receita Projetada. -->
+
+## Empresa 2
+
+```{r futura_2, echo=FALSE}
+Receita_E2[15:nrow(Receita_E1),] %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = round(Total/1000,2)),
+    color = "#22b24c",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Futura Garantida",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 500
+  )
+```
+
+<!-- Observa-se que embora a receita da empresa 1, nos dois primeiros meses de 2021, esteja na ordem dos 13 milhões de reais e a receita da empresa 2, no mesmo período, gire em torno dos 820 mil reais, a receita garantida para os próximos meses de 2021 da empresa 2 é muito superior à da empresa 1, tanto em termos relativos como em termos absolutos. Esse fenômeno pode ser explicado pela composição da origem da receita de cada empresa, que está apresentada nas tabelas que se econtram na aba "Receita Total". Enquanto a empresa 1 concentra sua receita quase que inteiramente na venda de planos mensais, a empresa 2 diversifica melhor a sua fonte de receita, vendendo planos mais longos, principalmente anuais e trimestrais. Dessa forma, a empresa 2 consegue garantir a manutenção de suas operações por um período maior de tempo e se torna menos vulnerável a choques externos de qualquer natureza. Este fato fica ainda mais evidente quando na sub-aba "Análise Proporcional" da aba "Projeções" se observa a diferença da participação percentual da Receita Garantida na Receita Projetada. -->
+
+## Consolidadas 
+
+```{r futura_cons, echo=FALSE}
+juntas2 <- setDT(data.frame("Mês" = Receita_E1[15:nrow(Receita_E1),1]))
+juntas2$Total <- Receita_E1$Total[15:nrow(Receita_E1)] + Receita_E2$Total[15:nrow(Receita_E1)]  
+juntas2 %>%
+  hchart(
+    "column", 
+    hcaes(x = `Mês`, y = round(Total/1000,2)),
+    color = "#0a3b1b",
+    name = "Receita"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Receita Futura Garantida",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_size(
+    height = 500
+  )
+```
+
+
+# {}
+
+Observa-se que embora a receita da empresa 1, nos dois primeiros meses de 2021, esteja na ordem dos 13 milhões de reais e a receita da empresa 2, no mesmo período, gire em torno dos 820 mil reais, a receita garantida para os próximos meses de 2021 da empresa 2 é muito superior à da empresa 1, tanto em termos relativos como em termos absolutos. Esse fenômeno pode ser explicado pela composição da origem da receita de cada empresa, que está apresentada nas tabelas que se encontram na aba "Receita Total". Enquanto a empresa 1 concentra sua receita quase que inteiramente na venda de planos mensais, a empresa 2 diversifica melhor a sua fonte de receita, vendendo planos mais longos, principalmente anuais e trimestrais. Dessa forma, a empresa 2 consegue garantir a manutenção de suas operações por um período maior de tempo e se torna menos vulnerável a choques externos de qualquer natureza. Este fato fica ainda mais evidente quando na sub-aba "Análise Proporcional" da aba "Projeções" se observa a diferença da participação percentual da Receita Garantida na Receita Projetada.
+
+
+# Churn {.tabset .tabset-fade}
+
+## Empresa 1 {.tabset .tabset-fade}
+
+### Cliente
+
+```{r churn_e1, echo=FALSE}
+churn_e1 <- clientes_e1[,c(1,ncol(clientes_e1))]
+# 
+# colnames(churn_v1)[4] <- "m1"
+# colnames(churn_v2)[4] <- "m2"
+# 
+# churn <- merge(churn_v1[,c(1,4)],churn_v2[,c(1,4)],by="Mes_ano")
+# churn <- churn[1:14,]
+# churn <- melt(churn,"Mes_ano")
+# colnames(churn) <- c("Mês","Metodologia","Churn (%)")
+# churn$Mês <- as.Date(churn$Mês)
+# churn$`Churn (%)` <- round(churn$`Churn (%)`,2)
+churn_e1[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = churn_e1),
+    color = "#22b24c",
+    name = "Churn de cliente (%)"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Churn de cliente (%)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 555
+  )
+```
+
+### Receita
+
+<font size="3">
+Para calcular o Churn de Receita da empresa 1, foram consideras as faturas do tipo trimestrais, semestrais e anuais. O valor foi contabilizado no mês em que o plano terminou e caculado a partir do número de dias em que o cliente deixou de auferir receita para a empresa. Ex: Se o plano acabou no dia 10/06 e o valor diário daquele plano era de 10 reais, o MRR churn é de  $10\times20 = 200$. O valor percentual é caculado com base na receita do mês anterior.
+</font>
+
+```{r churn_receita_e1, echo=FALSE}
+mrr_churn_e1 <- readRDS("~/Case_Stone/Resultados/mrr_churn_e1.rds")
+mrr_churn_e1$Mês <- as.Date(mrr_churn_e1$Mês)
+mrr_churn_e1 <- merge(mrr_churn_e1,Receita_E1[,c(1,6)],by="Mês",all.y = T)
+mrr_churn_e1[is.na(mrr_churn_e1)] <- 0
+mrr_churn_e1$Total <- c(0,mrr_churn_e1$Total[-nrow(mrr_churn_e1)])
+mrr_churn_e1$mrr_churn_perc <- round(mrr_churn_e1$mrr_churn/mrr_churn_e1$Total*100,2) 
+
+mrr_churn_e1[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = mrr_churn_perc),
+    color = "#22b24c",
+    name = "MRR Churn (%)"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Churn de receita (% em relação a t-1)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 555
+  )
+```
+
+
+
+
+## Empresa 2 {.tabset .tabset-fade}
+
+### Cliente
+
+<!-- <div class = "row"> -->
+<!-- <div class = "col-md-9"> -->
+
+```{r churn_e2, echo=FALSE}
+churn_e2 <- clientes_e2[,c(1,ncol(clientes_e2))]
+# 
+# colnames(churn_v1)[4] <- "m1"
+# colnames(churn_v2)[4] <- "m2"
+# 
+# churn <- merge(churn_v1[,c(1,4)],churn_v2[,c(1,4)],by="Mes_ano")
+# churn <- churn[1:14,]
+# churn <- melt(churn,"Mes_ano")
+# colnames(churn) <- c("Mês","Metodologia","Churn (%)")
+# churn$Mês <- as.Date(churn$Mês)
+# churn$`Churn (%)` <- round(churn$`Churn (%)`,2)
+churn_e2[1:14,] %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = churn_e2),
+    color = "#22b24c"
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Churn de cliente (%)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 555
+  )
+```
+
+<!-- </div> -->
+
+<!-- <div class = "col-md-3"> -->
+
+
+<!-- <font size="2"> -->
+<!-- **Metodologias:** -->
+<!-- \ -->
+<!-- **m1:** Considerou-se como clientes que cancelaram aqueles que utilizaram o serviço por um período menor que o contratdo e aqueles que eram clientes marcados como "recorrentes" mas tinham como data final do uso do serviço uma data anterior a uma data base, que aqui foi definida como 28/02/2021 -->
+<!-- \ -->
+<!-- **m2:** Além dos cancelamentos contabilizados na m1, considerou-se também clientes que utilizaram o serviço por um período não múltiplo do período contratado. Ex: um cliente que contratou um plano trimestral e o utilizou por 5 meses. É evidente que m2 $\geq$ m1. -->
+
+<!-- </font> -->
+<!-- </div> -->
+<!-- </div>     -->
+
+### Receita
+
+<font size="3">
+O valor foi contabilizado no mês em que o plano terminou ou foi cancelado e caculado a partir do número de dias em que o cliente deixou de auferir receita para a empresa. Ex: Se o plano acabou no dia 10/06 e o valor diário daquele plano era de 10 reais, o MRR churn é de  $10\times20 = 200$. O valor percentual é caculado com base na receita do mês anterior.
+</font>
+
+<div class = "row">
+<div class = "col-md-9">
+
+```{r churn_receita, echo=FALSE}
+mrr_churn <- readRDS("~/Case_Stone/result_parciais/MRR_churn.rds")
+colnames(mrr_churn) <- c("Mês","m1","m2")
+mrr_churn <- mrr_churn[-1,]
+mrr_churn$Mês <- seq.Date(from = as.Date("2020-01-01"),by = "month",length.out = nrow(mrr_churn))
+mrr_churn <- merge(mrr_churn,Receita_E2[,c(1,6)])
+mrr_churn[,c(2,3)] <- round(mrr_churn[,c(2,3)]/mrr_churn[,4]*100,2) 
+mrr_churn$Mês <- seq.Date(from = as.Date("2020-02-01"),by = "month",length.out = nrow(mrr_churn))
+
+mrr_churn <- mrr_churn[1:13,-4]
+
+mrr_churn <- melt(mrr_churn,"Mês")
+colnames(mrr_churn) <- c("Mês","Metodologia","Churn (%)")
+
+mrr_churn %>%
+  hchart(
+    "line", 
+    hcaes(x = `Mês`, y = `Churn (%)`,group = Metodologia),
+    color = c("#0a3b1b","#22b24c")
+  )   %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Churn de receita (% em relação a t-1)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = ""))  %>% 
+  hc_size(
+    height = 555
+  )
+```
+
+
+</div>
+
+<div class = "col-md-3">
+
+
+<font size="2">
+**Metodologias:**
+\
+**m1:** Considerou-se como clientes que cancelaram aqueles que utilizaram o serviço por um período menor que o contratdo e aqueles que eram clientes marcados como "recorrentes" mas tinham como data final do uso do serviço uma data anterior a uma data base, que aqui foi definida como 28/02/2021
+\
+**m2:** Além dos cancelamentos contabilizados na m1, considerou-se também clientes que utilizaram o serviço por um período não múltiplo do período contratado. Ex: um cliente que contratou um plano trimestral e o utilizou por 5 meses. É evidente que m2 $\geq$ m1.
+
+</font>
+</div>
+</div>    
+
+
+
+# Projeções {.tabset .tabset-fade}
+
+## Empresa 1 {.tabset .tabset-fade}
+
+### Valor Absoluto 
+
+```{r proj_e1, echo=FALSE}
+
+model1 <- auto.arima(ts((Receita_E1$Total[1:14]/1000000),start = c(2020,1),frequency = 12))
+fc1 <- forecast(model1,10)
+
+hchart(fc1) %>%
+  hc_colors(c("#22b24c","#0a3b1b")) %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Projeção da receita total (ARIMA (0,1,0) com drift)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ milhões"))  %>% 
+  hc_legend(list(text = c("Real","Projetado"))) %>%
+  hc_size(
+    height = 555
+  )
+
+```
+
+
+
+### Análise Proporcional
+
+```{r stack_graf_1,fig.align='center',fig.height=6, echo=FALSE}
+bs_graf_area <- cbind(Receita_E1[15:24,c(1,6)],fc1)
+bs_graf_area$Total <- round(bs_graf_area$Total/1000000,1) 
+bs_graf_area <- bs_graf_area[,1:3]
+bs_graf_area$Garantida <- bs_graf_area$Total/bs_graf_area$`Point Forecast`
+bs_graf_area$Projetada <- 1-bs_graf_area$Garantida
+bs_graf_area <- select(bs_graf_area,`Mês`,Projetada,Garantida)
+bs_graf_area <- melt(bs_graf_area,"Mês")
+bs_graf_area$Mês <- as.Date(bs_graf_area$Mês)
+colnames(bs_graf_area) <- c("Mês","Tipo Receita","Perc (%)")
+
+# Plot
+ggplot(bs_graf_area, aes(x=`Mês`, y=`Perc (%)`, fill=`Tipo Receita`)) + 
+  geom_area(alpha=0.8 , size=1) +
+  ggtitle(label = "Participação (%) da Receita Garantida na Receita Projetada") +
+  theme(plot.title = element_text(face = "bold", 
+                                  colour = "black", 
+                                  hjust = 0, size = 14), 
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12)) +
+  scale_fill_manual(values = c("#22b24c","#0a3b1b"))
+```
+
+
+## Empresa 2 {.tabset .tabset-fade}
+
+### Valor Absoluto
+
+```{r proj_e2, echo=FALSE}
+model2 <- auto.arima(ts((Receita_E2$Total[1:14]/1000),start = c(2020,1),frequency = 12))
+fc2 <- forecast(model2,10)
+
+hchart(fc2) %>%
+  hc_colors(c("#22b24c","#0a3b1b")) %>% 
+  hc_tooltip(
+    crosshairs = TRUE,
+    borderWidth = 3,
+    sort = TRUE,
+    table = TRUE
+  ) %>%
+  hc_title(text = "Projeção da receita total (ARIMA (0,1,0) com drift)",
+           style = list(fontWeight = "bold", 
+                        fontSize = "18px",
+                        fontFamily = "GT-Cinetype-Regular"),
+           align = "left") %>%
+  hc_xAxis(
+    title = list(text = "")) %>%
+  hc_yAxis(
+    title = list(text = "R$ mil"))  %>% 
+  hc_legend(list(text = c("Real","Projetado"))) %>%
+  hc_size(
+    height = 555
+  )
+```
+
+### Análise Proporcioanal
+
+```{r stack_graf_2,fig.align='center',fig.height=6, echo=FALSE}
+bs_graf_area <- cbind(Receita_E2[15:24,c(1,6)],fc2)
+bs_graf_area$Total <- round(bs_graf_area$Total/1000,1) 
+bs_graf_area <- bs_graf_area[,1:3]
+bs_graf_area$Garantida <- bs_graf_area$Total/bs_graf_area$`Point Forecast`
+bs_graf_area$Projetada <- 1-bs_graf_area$Garantida
+bs_graf_area <- select(bs_graf_area,`Mês`,Projetada,Garantida)
+bs_graf_area <- melt(bs_graf_area,"Mês")
+bs_graf_area$Mês <- as.Date(bs_graf_area$Mês)
+colnames(bs_graf_area) <- c("Mês","Tipo Receita","Perc (%)")
+
+# Plot
+ggplot(bs_graf_area, aes(x=`Mês`, y=`Perc (%)`, fill=`Tipo Receita`)) + 
+  geom_area(alpha=0.8 , size=1) +
+  ggtitle(label = "Participação (%) da Receita Garantida na Receita Projetada") +
+  theme(plot.title = element_text(face = "bold", 
+                                  colour = "black", 
+                                  hjust = 0, size = 14), 
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12)) +
+  scale_fill_manual(values = c("#22b24c","#0a3b1b"))
+```
+
+
+# {} 
+
+Utilizou-se, para realizar as projeções, um método de modelagem de séries temporais no qual o valor da série do tempo t depende de seu valor em t-1. É difícil imaginar outro tipo de método para modelar uma série mensal que tem apenas 14 observações e apresenta uma tendência linear tão bem definida como é o caso das séries em que são aqui estudas. Com isso, é importante ter em mente as limitações que tem o modelo utilizado. Uma outra opção seria projetar a receita via projeção do preço e da quantidade, utilizando os dados de valor das compras, número de clientes e churn. Contudo, nesse caso, seria necessário projetar três séries diferentes com as mesmas 14 observações e o resultado final seria uma operação com essas três projeções. Assim, perderíamos ainda mais precisão e o resultado não seria muito distante deste alcançado pelo método mais simples. Sendo assim, optou-se por utilizar apenas o primeiro método para realização das projeções.
+
